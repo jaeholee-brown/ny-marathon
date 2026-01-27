@@ -43,6 +43,7 @@ qr_fit_5 <- rq(
 # extract coefficients
 coef_5 <- GetQrCoefs(qr_fit_5, taus)
 print(coef_5)
+write.csv(coef_5, "output/coef_m5_school_stage.csv", row.names = FALSE)
 
 # prepare plot data
 plot_data_5 <- coef_5 %>%
@@ -78,6 +79,6 @@ p_m5 <- ggplot(
   theme_minimal(base_size = 12)
 
 print(p_m5)
-ggsave("m5_school_stage.png", p_m5, width = 10, height = 6, dpi = 300)
+ggsave("output/m5_school_stage.png", p_m5, width = 10, height = 6, dpi = 300)
 
 message("model 5 complete")

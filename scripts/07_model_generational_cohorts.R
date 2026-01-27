@@ -41,6 +41,7 @@ qr_fit_4 <- rq(
 # extract coefficients
 coef_4 <- GetQrCoefs(qr_fit_4, taus)
 print(coef_4)
+write.csv(coef_4, "output/coef_m6_generational.csv", row.names = FALSE)
 
 # prepare plot data
 plot_data_4 <- coef_4 %>%
@@ -76,6 +77,6 @@ p_m6 <- ggplot(
   theme_minimal(base_size = 12)
 
 print(p_m6)
-ggsave("m6_generational.png", p_m6, width = 10, height = 6, dpi = 300)
+ggsave("output/m6_generational.png", p_m6, width = 10, height = 6, dpi = 300)
 
 message("model 6 complete")

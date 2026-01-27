@@ -39,6 +39,7 @@ qr_fit_18 <- rq(
 # extract coefficients
 coef_18 <- GetQrCoefs(qr_fit_18, taus)
 print(coef_18)
+write.csv(coef_18, "output/coef_m3_18category.csv", row.names = FALSE)
 
 # prepare plot data: effects by exposure year
 plot_data_18 <- coef_18 %>%
@@ -71,6 +72,6 @@ p_m3 <- ggplot(
   theme_minimal(base_size = 12)
 
 print(p_m3)
-ggsave("m3_18category.png", p_m3, width = 10, height = 6, dpi = 300)
+ggsave("output/m3_18category.png", p_m3, width = 10, height = 6, dpi = 300)
 
 message("model 3 complete")

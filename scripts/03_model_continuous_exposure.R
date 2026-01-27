@@ -40,6 +40,7 @@ qr_fit_cont <- rq(
 
 # extract coefficients
 coef_cont <- GetQrCoefs(qr_fit_cont, taus)
+write.csv(coef_cont, "output/coef_m2_continuous.csv", row.names = FALSE)
 
 # print only the relevant continuous term
 coef_cont %>%
@@ -83,6 +84,6 @@ p_m2 <- ggplot(
   )
 
 print(p_m2)
-ggsave("continuous_plot.png", p_m2, width = 10, height = 7, dpi = 300)
+ggsave("output/continuous_plot.png", p_m2, width = 10, height = 7, dpi = 300)
 
 message("model 2 complete")

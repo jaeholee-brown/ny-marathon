@@ -36,6 +36,7 @@ qr_fit_base <- rq(
 # extract coefficients
 coef_base <- GetQrCoefs(qr_fit_base, taus)
 print(coef_base)
+write.csv(coef_base, "output/coef_m1_base_titleix.csv", row.names = FALSE)
 
 # prepare plot data for "some" and "yes" vs "no"
 plot_data_base <- coef_base %>%
@@ -85,7 +86,7 @@ p_m1_ribbon <- ggplot(
   )
 
 print(p_m1_ribbon)
-ggsave("m1_base_titleix.png", p_m1_ribbon, width = 10, height = 7, dpi = 300)
+ggsave("output/m1_base_titleix.png", p_m1_ribbon, width = 10, height = 7, dpi = 300)
 
 # visualization: error bar plot with custom colors
 p_m1_errorbar <- ggplot(
@@ -125,6 +126,6 @@ p_m1_errorbar <- ggplot(
   )
 
 print(p_m1_errorbar)
-ggsave("someyesplot.png", p_m1_errorbar, width = 7, height = 5, dpi = 300)
+ggsave("output/someyesplot.png", p_m1_errorbar, width = 7, height = 5, dpi = 300)
 
 message("model 1 complete")

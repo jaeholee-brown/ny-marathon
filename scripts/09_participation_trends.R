@@ -50,7 +50,7 @@ p_participation <- ggplot(
 print(p_participation)
 
 ggsave(
-  filename = "nyc_marathon_poster.png",
+  filename = "output/nyc_marathon_poster.png",
   plot = p_participation,
   width = 15,
   height = 12,

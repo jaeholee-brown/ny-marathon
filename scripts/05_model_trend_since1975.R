@@ -30,6 +30,7 @@ qr_fit_since1975 <- rq(
 
 # extract coefficients
 coef_since1975 <- GetQrCoefs(qr_fit_since1975, taus)
+write.csv(coef_since1975, "output/coef_m4_trend.csv", row.names = FALSE)
 
 # print only the relevant trend term
 coef_since1975 %>%
