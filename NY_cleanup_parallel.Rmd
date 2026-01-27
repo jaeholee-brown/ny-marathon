@@ -1,0 +1,743 @@
+---
+title: "NY_cleanup_parallel"
+author: "Jaeho Lee"
+date: "2025-12-08"
+output: pdf_document
+---
+
+```{r setup, message=FALSE}
+library(dplyr)
+library(forcats)
+library(ggplot2)
+library(scales)
+library(tidyr)
+library(stringr)
+library(hms)
+library(quantreg)
+library(splines)
+library(broom)
+
+# Parallel back-end --------------------------------------------------------
+
+library(future)
+library(future.apply)
+
+# Use a reasonable number of workers.
+# availableCores() respects system / RStudio limits and environment settings.
+available <- future::availableCores()
+workers <- max(1L, min(as.integer(available) - 1L, 8L))
+
+plan(multisession, workers = workers)
+
+print(workers)
+
+# Define quantiles globally -----------------------------------------------
+
+taus <- c(0.10, 0.25, 0.50, 0.75, 0.90)
+
+# Helper to extract tidy coefficients from rq objects ---------------------
+
+get_qr_coefs <- function(fit_model, taus_vec) {
+  model_sum <- summary(fit_model, se = "nid", covariance = FALSE)
+  
+  dplyr::bind_rows(lapply(seq_along(taus_vec), function(i) {
+    s  <- model_sum[[i]]
+    tb <- as.data.frame(s$coefficients)
+    tibble::tibble(
+      term      = rownames(tb),
+      tau       = taus_vec[i],
+      estimate  = tb[, "Value"],
+      std.error = tb[, "Std. Error"],
+      p.value   = tb[, "Pr(>|t|)"]
+    )
+  })) %>%
+    dplyr::filter(!grepl("^factor\\(Year\\)", term))
+}
+```
+
+```{r}
+# Load and clean data
+df <- read.csv("NYC Marathon Results.csv",
+               stringsAsFactors = FALSE,
+               check.names = FALSE) %>%
+  mutate(
+    Year = as.integer(Year),
+    Age  = as.integer(Age)
+  ) %>%
+  filter(Country == "USA") %>%
+  mutate(
+    `Year of Birth` = Year - Age,
+    FinishSeconds   = as.numeric(as_hms(`Finish Time`)),
+    Gender          = factor(Gender, levels = c("W", "M"))
+  ) %>%
+  filter(!is.na(FinishSeconds), !is.na(Year), !is.na(Age), !is.na(Gender))
+```
+
+```{r}
+### Model 1: Base Title IX (3-Level Factor) ###
+
+# Create 3-level Title IX variable
+df_m1 <- df %>%
+  mutate(
+    TitleIX = dplyr::case_when(
+      Gender == "M" ~ "No",
+      `Year of Birth` >= 1970 ~ "Yes",
+      `Year of Birth` >= 1954 & `Year of Birth` <= 1969 ~ "Some",
+      `Year of Birth` <= 1953 ~ "No",
+      TRUE ~ NA_character_
+    ),
+    TitleIX = factor(TitleIX, levels = c("No", "Some", "Yes"))
+  ) %>%
+  filter(!is.na(TitleIX))
+
+qr_fit_base <- rq(
+  FinishSeconds ~
+    factor(Year) +
+    bs(Age, knots = c(21, 45, 60)) +
+    TitleIX +
+    Gender +
+    bs(Age, knots = c(21, 45, 60)) : Gender,
+  tau   = taus,
+  data  = df_m1,
+  method = "fn"
+)
+```
+
+```{r}
+coef_base <- get_qr_coefs(qr_fit_base, taus)
+print(coef_base)
+```
+
+```{r}
+# Plot effects for "Some" and "Yes" vs "No"
+plot_data_base <- coef_base %>%
+  filter(term %in% c("TitleIXSome", "TitleIXYes")) %>%
+  mutate(
+    label      = fct_recode(term,
+                            "Some vs No" = "TitleIXSome",
+                            "Yes vs No"  = "TitleIXYes"),
+    effect_min = estimate,
+    lo         = (estimate - 1.96 * std.error),
+    hi         = (estimate + 1.96 * std.error)
+  )
+
+print(plot_data_base)
+
+ggplot(plot_data_base, aes(x = tau, y = effect_min, color = label, group = label)) +
+  geom_ribbon(aes(ymin = lo, ymax = hi, fill = label), alpha = 0.15, color = NA) +
+  geom_line(size = 1) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  scale_x_continuous(labels = scales::percent_format(accuracy = 1)) +
+  labs(x = "Quantile (tau)", y = "Effect on finish time (minutes)",
+       title = "Estimated Title IX effect (Base Model)") +
+  theme_minimal(base_size = 12)
+
+ggsave("someyesplot.png")
+```
+
+```{r}
+p_some_yes <- ggplot(
+  plot_data_base,
+  aes(x = tau, y = effect_min, color = label, group = label)
+) +
+  # CIs with horizontal caps
+  geom_errorbar(
+    aes(ymin = lo, ymax = hi),
+    width = 0.02,   # adjust if tau grid is denser/sparser
+    size  = 0.8
+  ) +
+  # Dots at estimates
+  geom_point(size = 1.8) +
+  # Line through estimates
+  geom_line(size = 1) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  scale_x_continuous(labels = scales::percent_format(accuracy = 1)) +
+  scale_color_manual(
+    values = c(
+      "Some vs No" = "goldenrod1",
+      "Yes vs No"  = "forestgreen"
+    )
+  ) +
+  labs(
+    x     = "Quantile",
+    y     = "Effect on finish time (seconds)",
+    title = "Estimated Title IX effect (M1)",
+    color = NULL
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    plot.title = element_text(
+      face = "bold",
+      size = 24,
+      hjust = 0.5
+    ),
+    axis.title = element_text(
+      face = "bold",
+      size = 18
+    ),
+    axis.text = element_text(
+      size = 16
+    ),
+    legend.text = element_text(
+      size = 16
+    ),
+    legend.position = c(1, 1),
+    legend.justification = c(1.07, 1.45),
+    legend.background = element_rect(fill = "white", color = "black")
+  )
+
+p_some_yes
+
+ggsave("someyesplot.png", p_some_yes, width = 7, height = 5, dpi = 300)
+
+```
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(forcats)
+
+# Plot effects for "Some" and "Yes" vs "No" — in **seconds**
+plot_data_base <- coef_base %>%
+  filter(term %in% c("TitleIXSome", "TitleIXYes")) %>%
+  mutate(
+    label     = fct_recode(term,
+                           "Some vs No" = "TitleIXSome",
+                           "Yes vs No"  = "TitleIXYes"),
+    effect_sec = estimate,
+    lo         = estimate - 1.96 * std.error,
+    hi         = estimate + 1.96 * std.error
+  )
+
+ggplot(
+  plot_data_base,
+  aes(x = tau, y = effect_sec, color = label, group = label)
+) +
+  # 95% CI ribbons
+  geom_ribbon(aes(ymin = lo, ymax = hi, fill = label),
+              alpha = 0.20, color = NA) +
+  # lines
+  geom_line(linewidth = 1.2) +
+  # reference line
+  geom_hline(yintercept = 0, linetype = "dashed", linewidth = 0.6) +
+  # x-axis as percent quantiles
+  scale_x_continuous(labels = scales::percent_format(accuracy = 1)) +
+  # nicer legend title
+  scale_color_discrete(name = "Title IX status") +
+  scale_fill_discrete(name = "Title IX status") +
+  labs(
+    x = "Quantile (τ)",
+    y = "Effect on finish time (seconds)",
+    title = "Estimated Title IX effect (Base Model)"
+  ) +
+  theme_minimal(base_size = 18) +
+  theme(
+    plot.title   = element_text(face = "bold", hjust = 0.5, size = 22),
+    axis.title   = element_text(face = "bold", size = 20),
+    axis.text    = element_text(size = 16),
+    legend.title = element_text(face = "bold", size = 18),
+    legend.text  = element_text(size = 16),
+    legend.position = "bottom",
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank(),
+    plot.margin = margin(t = 15, r = 20, b = 15, l = 20)
+  )
+```
+
+```{r}
+### Model 2: Continuous Exposure (0-17 Years) ###
+
+# Map birth years to Title IX exposure duration (0-17 years)
+df_m2 <- df %>%
+  mutate(
+    # Recreate the base variable for logic mapping
+    TitleIX_Cat = dplyr::case_when(
+      Gender == "M" ~ "No",
+      `Year of Birth` >= 1970 ~ "Yes",
+      `Year of Birth` >= 1954 & `Year of Birth` <= 1969 ~ "Some",
+      TRUE ~ "No"
+    ),
+    TitleIX_years = dplyr::case_when(
+      TitleIX_Cat == "No"   ~ 0,
+      TitleIX_Cat == "Yes"  ~ 17,
+      TitleIX_Cat == "Some" ~ pmin(pmax(`Year of Birth` - 1953, 1), 16),
+      TRUE ~ NA_real_
+    )
+  ) %>%
+  filter(!is.na(TitleIX_years))
+
+qr_fit_cont <- rq(
+  FinishSeconds ~
+    factor(Year) +
+    bs(Age, knots = c(21, 45, 60)) +
+    TitleIX_years +
+    Gender +
+    bs(Age, knots = c(21, 45, 60)) : Gender,
+  tau   = taus,
+  data  = df_m2,
+  method = "fn"
+)
+```
+
+```{r}
+coef_cont <- get_qr_coefs(qr_fit_cont, taus)
+
+# Print only the relevant continuous term
+coef_cont %>%
+  filter(term == "TitleIX_years") %>%
+  print()
+```
+
+```{r}
+library(dplyr)
+library(ggplot2)
+
+coef_cont_titleix <- coef_cont %>%
+  filter(term == "TitleIX_years")
+
+ggplot(coef_cont_titleix,
+       aes(x = tau, y = estimate)) +
+  # reference line at 0
+  geom_hline(yintercept = 0, linetype = "dashed", linewidth = 0.6) +
+  # 95% CI error bars
+  geom_errorbar(aes(ymin = estimate - 1.96 * std.error,
+                    ymax = estimate + 1.96 * std.error),
+                width = 0.03,
+                linewidth = 0.8) +
+  # points and connecting line
+  geom_line(linewidth = 1) +
+  geom_point(size = 3) +
+  scale_x_continuous(breaks = coef_cont_titleix$tau) +
+  labs(
+    x = "Quantile (τ)",
+    y = "Seconds (s)",
+    title = "Coefficients for TitleIX_years, by Quantile"
+  ) +
+  theme_minimal(base_size = 18) +
+  theme(
+    # Title & text
+    plot.title = element_text(face = "bold", hjust = 0.5, size = 22),
+    axis.title = element_text(face = "bold", size = 20),
+    axis.text  = element_text(size = 16),
+    
+    # Grid and panel tweaks
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank(),
+    
+    # Margins for breathing room on a poster
+    plot.margin = margin(t = 15, r = 20, b = 15, l = 20)
+  )
+
+ggsave("continuous_plot.png")
+```
+
+
+
+```{r}
+### Model 3: 18-Category Discrete (No, Some1-16, Yes) ###
+
+# Create granular factor levels for every year of exposure
+df_m3 <- df_m2 %>%
+  mutate(
+    TitleIX_years_disc = as.integer(TitleIX_years),
+    TitleIX_18 = dplyr::case_when(
+      TitleIX_years_disc == 0L  ~ "No",
+      TitleIX_years_disc == 17L ~ "Yes",
+      TitleIX_years_disc >= 1L & TitleIX_years_disc <= 16L ~ paste0("Some", TitleIX_years_disc),
+      TRUE ~ NA_character_
+    ),
+    # Ensure correct ordering: No -> Some1...Some16 -> Yes
+    TitleIX_18 = factor(TitleIX_18, levels = c("No", paste0("Some", 1:16), "Yes"))
+  ) %>%
+  filter(!is.na(TitleIX_18))
+
+qr_fit_18 <- rq(
+  FinishSeconds ~
+    factor(Year) +
+    bs(Age, knots = c(21, 45, 60)) +
+    TitleIX_18 +
+    Gender +
+    bs(Age, knots = c(21, 45, 60)) : Gender,
+  tau   = taus,
+  data  = df_m3,
+  method = "fn"
+)
+```
+
+```{r}
+coef_18 <- get_qr_coefs(qr_fit_18, taus)
+print(coef_18)
+```
+
+```{r}
+# Plot effects by exposure year (x-axis) rather than quantile
+plot_data_18 <- coef_18 %>%
+  filter(grepl("^TitleIX_18Some|TitleIX_18Yes", term)) %>%
+  mutate(
+    exposure = dplyr::case_when(
+      grepl("Some", term) ~ as.integer(str_remove(term, "^TitleIX_18Some")),
+      grepl("Yes", term)  ~ 17L
+    ),
+    effect_min = estimate / 60
+  )
+
+ggplot(plot_data_18, aes(x = exposure, y = effect_min, color = factor(tau))) +
+  geom_line() +
+  geom_point() +
+  scale_x_continuous(breaks = 1:17, labels = c(as.character(1:16), "Yes")) +
+  labs(x = "Exposure (Years)", y = "Effect vs No (minutes)",
+       color = "Quantile", title = "Title IX effect by exposure duration") +
+  theme_minimal(base_size = 12)
+```
+
+```{r}
+### Model 4: Continuous Trend Since 1975 ###
+
+# Trend variable: 0 for men/pre-1975, (Year - 1975) for women post-1975
+df_m4 <- df %>%
+  mutate(
+    TitleIX_since1975 = dplyr::case_when(
+      Gender == "W" & Year >= 1975 ~ Year - 1975,
+      TRUE ~ 0
+    )
+  )
+
+qr_fit_since1975 <- rq(
+  FinishSeconds ~
+    factor(Year) +
+    bs(Age, knots = c(21, 45, 60)) +
+    TitleIX_since1975 +
+    Gender +
+    bs(Age, knots = c(21, 45, 60)) : Gender,
+  tau   = taus,
+  data  = df_m4,
+  method = "fn"
+)
+```
+
+```{r}
+coef_since1975 <- get_qr_coefs(qr_fit_since1975, taus)
+
+coef_since1975 %>%
+  filter(term == "TitleIX_since1975") %>%
+  print()
+```
+
+```{r}
+### Model 5: School Stage (5-Level Factor) ###
+
+# Categorize by school stage during Title IX implementation
+df_m5 <- df %>%
+  mutate(
+    TitleIX_5 = dplyr::case_when(
+      Gender == "M" ~ "None",
+      `Year of Birth` <= 1953 ~ "None",
+      `Year of Birth` >= 1954 & `Year of Birth` <= 1958 ~ "High",
+      `Year of Birth` >= 1959 & `Year of Birth` <= 1961 ~ "Middle",
+      `Year of Birth` >= 1962 & `Year of Birth` <= 1969 ~ "Elementary",
+      `Year of Birth` >= 1970 ~ "Yes",
+      TRUE ~ NA_character_
+    ),
+    TitleIX_5 = factor(TitleIX_5, levels = c("None", "Elementary", "Middle", "High", "Yes"))
+  ) %>%
+  filter(!is.na(TitleIX_5))
+
+qr_fit_5 <- rq(
+  FinishSeconds ~
+    factor(Year) +
+    bs(Age, knots = c(21, 45, 60)) +
+    TitleIX_5 +
+    Gender +
+    bs(Age, knots = c(21, 45, 60)) : Gender,
+  tau   = taus,
+  data  = df_m5,
+  method = "fn"
+)
+```
+
+```{r}
+coef_5 <- get_qr_coefs(qr_fit_5, taus)
+print(coef_5)
+```
+
+```{r}
+plot_data_5 <- coef_5 %>%
+  filter(grepl("^TitleIX_5", term)) %>%
+  mutate(
+    label      = str_remove(term, "^TitleIX_5"),
+    effect_min = estimate / 60,
+    lo         = (estimate - 1.96 * std.error) / 60,
+    hi         = (estimate + 1.96 * std.error) / 60
+  )
+
+ggplot(plot_data_5, aes(x = tau, y = effect_min, color = label, group = label)) +
+  geom_ribbon(aes(ymin = lo, ymax = hi, fill = label), alpha = 0.15, color = NA) +
+  geom_line(size = 1) +
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  scale_x_continuous(labels = scales::percent_format(accuracy = 1)) +
+  labs(x = "Quantile (tau)", y = "Effect vs None (minutes)",
+       color = "School Stage", fill = "School Stage",
+       title = "Title IX effect by school stage") +
+  theme_minimal(base_size = 12)
+```
+
+```{r}
+### Model 6: Generational Cohorts (4-Level Factor) ###
+
+# Categorize by broad generational cohorts
+df_m6 <- df %>%
+  mutate(
+    TitleIX_4 = dplyr::case_when(
+      Gender == "M" ~ "None",
+      `Year of Birth` <= 1953 ~ "None",
+      `Year of Birth` >= 1954 & `Year of Birth` <= 1969 ~ "Early",
+      `Year of Birth` >= 1970 & `Year of Birth` <= 1988 ~ "Middle",
+      `Year of Birth` >= 1989 ~ "Late",
+      TRUE ~ NA_character_
+    ),
+    TitleIX_4 = factor(TitleIX_4, levels = c("None", "Early", "Middle", "Late"))
+  ) %>%
+  filter(!is.na(TitleIX_4))
+
+qr_fit_4 <- rq(
+  FinishSeconds ~
+    factor(Year) +
+    bs(Age, knots = c(21, 45, 60)) +
+    TitleIX_4 +
+    Gender +
+    bs(Age, knots = c(21, 45, 60)) : Gender,
+  tau   = taus,
+  data  = df_m6,
+  method = "fn"
+)
+```
+
+```{r}
+coef_4 <- get_qr_coefs(qr_fit_4, taus)
+print(coef_4)
+```
+
+```{r}
+plot_data_4 <- coef_4 %>%
+  filter(grepl("^TitleIX_4", term)) %>%
+  mutate(
+    label      = str_remove(term, "^TitleIX_4"),
+    effect_min = estimate / 60,
+    lo         = (estimate - 1.96 * std.error) / 60,
+    hi         = (estimate + 1.96 * std.error) / 60
+  )
+
+ggplot(plot_data_4, aes(x = tau, y = effect_min, color = label, group = label)) +
+  geom_ribbon(aes(ymin = lo, ymax = hi, fill = label), alpha = 0.15, color = NA) +
+  geom_line(size = 1) +
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  scale_x_continuous(labels = scales::percent_format(accuracy = 1)) +
+  labs(x = "Quantile (tau)", y = "Effect vs None (minutes)",
+       color = "Cohort", fill = "Cohort",
+       title = "Title IX effect by generation") +
+  theme_minimal(base_size = 12)
+```
+
+```{r}
+### Model comparison via 5-fold CV (pinball loss)
+
+# Check / pinball loss for a given tau
+
+check_loss <- function(y, yhat, tau) {
+u <- y - yhat
+(tau - (u < 0)) * u
+}
+
+# K-fold CV for a given data + formula across all taus
+
+cv_qr_mean_loss <- function(df, formula, taus_vec, K = 5) {
+n     <- nrow(df)
+folds <- sample(rep(1:K, length.out = n))
+
+tau_losses <- vapply(taus_vec, function(tau) {
+loss <- numeric(n)
+
+for (k in seq_len(K)) {
+  train_idx <- folds != k
+  test_idx  <- folds == k
+  
+  fit_k <- rq(
+    formula,
+    tau    = tau,
+    data   = df[train_idx, , drop = FALSE],
+    method = "fn"
+  )
+  
+  pred_k <- predict(fit_k, newdata = df[test_idx, , drop = FALSE])
+  loss[test_idx] <- check_loss(df$FinishSeconds[test_idx], pred_k, tau)
+}
+
+mean(loss)
+
+}, numeric(1))
+
+mean(tau_losses)
+}
+
+set.seed(123)  # for reproducible folds (within each model)
+
+# Extract formulas from the models you've already fit
+
+form_m1 <- formula(qr_fit_base)
+form_m2 <- formula(qr_fit_cont)
+form_m3 <- formula(qr_fit_18)
+form_m4 <- formula(qr_fit_since1975)
+form_m5 <- formula(qr_fit_5)
+form_m6 <- formula(qr_fit_4)
+
+# Helper: run CV for one model
+
+cv_one_model <- function(df, form, label) {
+tibble::tibble(
+model = label,
+mean_check_loss = cv_qr_mean_loss(df, form, taus, K = 5)
+)
+}
+
+# Launch six futures – each sees only its own df + form
+
+f1 <- future::future(
+cv_one_model(df_m1, form_m1, "M1: 3-level factor"),
+packages = c("quantreg", "splines", "tibble")
+)
+
+f2 <- future::future(
+cv_one_model(df_m2, form_m2, "M2: Continuous 0–17 yrs"),
+packages = c("quantreg", "splines", "tibble")
+)
+
+f3 <- future::future(
+cv_one_model(df_m3, form_m3, "M3: 18-level discrete"),
+packages = c("quantreg", "splines", "tibble")
+)
+
+f4 <- future::future(
+cv_one_model(df_m4, form_m4, "M4: Trend since 1975"),
+packages = c("quantreg", "splines", "tibble")
+)
+
+f5 <- future::future(
+cv_one_model(df_m5, form_m5, "M5: School stage (5-level)"),
+packages = c("quantreg", "splines", "tibble")
+)
+
+f6 <- future::future(
+cv_one_model(df_m6, form_m6, "M6: Generational cohorts (4-level)"),
+packages = c("quantreg", "splines", "tibble")
+)
+
+# Collect results
+
+cv_results <- dplyr::bind_rows(
+future::value(f1),
+future::value(f2),
+future::value(f3),
+future::value(f4),
+future::value(f5),
+future::value(f6)
+) %>%
+arrange(mean_check_loss)
+
+cv_results
+```
+
+```{r}
+# Optional: simple visualization of the ranking
+
+cv_results %>%
+  mutate(model = forcats::fct_reorder(model, mean_check_loss)) %>%
+  ggplot(aes(x = model, y = mean_check_loss)) +
+  geom_col() +
+  coord_flip() +
+  labs(
+    x = NULL,
+    y = "5-fold mean check loss (lower is better)",
+    title = "Cross-validated quantile loss by Title IX specification"
+  ) +
+  theme_minimal(base_size = 12)
+```
+
+```{r}
+# Summarize the data by Year and Gender
+participants_by_year <- df %>%
+  group_by(Year, Gender) %>%
+  summarize(
+    N = n(),
+    .groups = "drop"
+  )
+
+# Poster-style stacked bar chart
+ggplot(participants_by_year, aes(x = Year, y = N, fill = Gender)) +
+  # Stacked bars
+  geom_bar(stat = "identity", position = "stack", alpha = 0.9) +
+  
+  # Custom gender colors
+  scale_fill_manual(
+    values = c(
+      "W" = "#FF7F00",  # Orange for Women
+      "M" = "#1F78B4"   # Blue for Men
+    ),
+    labels = c("W" = "Women (W)", "M" = "Men (M)")
+  ) +
+  
+  # Axis formatting
+  scale_y_continuous(labels = scales::comma) +
+  scale_x_continuous(breaks = scales::pretty_breaks(10)) +
+  
+  # Labels
+  labs(
+    title = "Americans in NYC Marathon (1970-2010)",
+    x = "Year",
+    y = "Number of Participants",
+    fill = "Gender"
+  ) +
+  
+  # Poster theme adjustments
+  theme_minimal(base_size = 36) +
+  theme(
+    plot.title        = element_text(face = "bold", hjust = 0.5, size = 44),
+    legend.position   = "bottom",
+    legend.title      = element_text(face = "bold"),
+    panel.grid.minor  = element_blank(),
+    axis.title.y      = element_text(margin = margin(r = 12)),
+    axis.title.x      = element_text(margin = margin(t = 12))
+  )
+
+ggsave(
+  filename = "nyc_marathon_poster.png",
+  width    = 15,       # inches
+  height   = 12,
+  dpi      = 600       # print quality
+)
+```
+
+```{r}
+### Final Sample Size Calculation ###
+
+# Calculate the total number of finishers (N)
+N_total <- nrow(df)
+
+# Calculate the number of women finishers (NW)
+N_women <- df %>%
+  filter(Gender == "W") %>%
+  nrow()
+
+# Print the results in the requested format
+cat(
+  "Final analytic sample: N=", N_total,
+  "\nN=", N_total, " finishers, of which NW=", N_women,
+  "\nNW = ", N_women, " women."
+)
+```
+
+```{r teardown, echo=FALSE, message=FALSE}
+# Clean up parallel workers when knitting is done
+plan(sequential)
+```
