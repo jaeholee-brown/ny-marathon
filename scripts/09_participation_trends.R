@@ -1,9 +1,9 @@
-# participation trends: visualization of participant counts by year and gender
+# descriptive figures: participation over time and age distribution
 #
 # requires: 00_setup.R and 01_data_cleaning.R to be sourced first
-# outputs: participants_by_year, poster png
+# outputs: participants_by_year and two png files
 
-# summarize the data by year and gender
+# summarize the data by year and sex
 participants_by_year <- df %>%
   group_by(Year, Gender) %>%
   summarize(
@@ -18,7 +18,7 @@ p_participation <- ggplot(
 ) +
   # stacked bars
   geom_bar(stat = "identity", position = "stack", alpha = 0.9) +
-  # custom gender colors
+  # custom sex colors
   scale_fill_manual(
     values = c(
       "W" = "#FF7F00",
@@ -31,15 +31,15 @@ p_participation <- ggplot(
   scale_x_continuous(breaks = scales::pretty_breaks(10)) +
   # labels
   labs(
-    title = "Americans in NYC Marathon (1970-2010)",
+    title = "Americans in NYC Marathon (1970-2024)",
     x = "Year",
     y = "Number of Participants",
-    fill = "Gender"
+    fill = "Sex"
   ) +
   # poster theme adjustments
-  theme_minimal(base_size = 36) +
+  theme_minimal(base_size = 20) +
   theme(
-    plot.title = element_text(face = "bold", hjust = 0.5, size = 44),
+    plot.title = element_text(face = "bold", hjust = 0.5, size = 20),
     legend.position = "bottom",
     legend.title = element_text(face = "bold"),
     panel.grid.minor = element_blank(),
@@ -47,14 +47,45 @@ p_participation <- ggplot(
     axis.title.x = element_text(margin = margin(t = 12))
   )
 
-print(p_participation)
+if (interactive()) print(p_participation)
 
 ggsave(
   filename = "output/nyc_marathon_poster.png",
   plot = p_participation,
   width = 15,
   height = 12,
-  dpi = 600
+  dpi = 600,
+  bg = "white"
 )
 
-message("participation trends complete")
+# age-distribution histogram
+p_age <- ggplot(df, aes(x = Age)) +
+  geom_histogram(
+    binwidth = 1,
+    boundary = 18,
+    fill = "white",
+    color = "grey60",
+    linewidth = 0.3
+  ) +
+  scale_y_continuous(labels = scales::comma) +
+  labs(
+    x = "Age (years)",
+    y = "Count"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    panel.grid.minor = element_blank()
+  )
+
+if (interactive()) print(p_age)
+
+ggsave(
+  filename = "output/age_distribution.png",
+  plot = p_age,
+  width = 7,
+  height = 5,
+  dpi = 300,
+  bg = "white"
+)
+
+message("descriptive figures complete")
