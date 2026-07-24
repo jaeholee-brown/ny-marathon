@@ -13,9 +13,10 @@ N_women <- df %>%
 
 # print the results
 cat(
-  "Final analytic sample: N=", N_total,
-  "\nN=", N_total, " finishers, of which NW=", N_women,
-  "\nNW = ", N_women, " women."
+  "Final analytic sample: N = ", format(N_total, big.mark = ","),
+  " finishes\nWomen: N = ", format(N_women, big.mark = ","),
+  " (", round(100 * N_women / N_total, 1), "%)\n",
+  sep = ""
 )
 
 message("\nsample summary complete")

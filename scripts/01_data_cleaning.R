@@ -22,14 +22,18 @@ df <- df %>%
 df <- df %>%
   mutate(
     `Year of Birth` = Year - Age,
-    FinishSeconds = as.numeric(as_hms(`Finish Time`)),
+    FinishMinutes = as.numeric(as_hms(`Finish Time`)) / 60,
     Gender = factor(Gender, levels = c("W", "M"))
   )
+
+# restrict the analysis to adults
+df <- df %>%
+  filter(Age >= 18)
 
 # remove rows with missing values in key variables
 df <- df %>%
   filter(
-    !is.na(FinishSeconds),
+    !is.na(FinishMinutes),
     !is.na(Year),
     !is.na(Age),
     !is.na(Gender)

@@ -1,0 +1,36 @@
+R version 4.4.0 (2024-04-24)
+Platform: aarch64-apple-darwin20
+Running under: macOS 15.4
+
+Matrix products: default
+BLAS:   /Library/Frameworks/R.framework/Versions/4.4-arm64/Resources/lib/libRblas.0.dylib 
+LAPACK: /Library/Frameworks/R.framework/Versions/4.4-arm64/Resources/lib/libRlapack.dylib;  LAPACK version 3.12.0
+
+locale:
+[1] C.UTF-8/C.UTF-8/C.UTF-8/C/C.UTF-8/C.UTF-8
+
+time zone: America/Los_Angeles
+tzcode source: internal
+
+attached base packages:
+[1] splines   stats     graphics  grDevices utils     datasets  methods  
+[8] base     
+
+other attached packages:
+ [1] future.apply_1.20.0 future_1.67.0       broom_1.0.7        
+ [4] quantreg_5.99.1     SparseM_1.84-2      hms_1.1.3          
+ [7] scales_1.3.0        ggplot2_3.5.1       tibble_3.2.1       
+[10] stringr_1.5.1       tidyr_1.3.1         forcats_1.0.0      
+[13] dplyr_1.1.4        
+
+loaded via a namespace (and not attached):
+ [1] Matrix_1.7-0       gtable_0.3.5       compiler_4.4.0     tidyselect_1.2.1  
+ [5] MatrixModels_0.5-3 parallel_4.4.0     textshaping_0.3.7  systemfonts_1.0.6 
+ [9] globals_0.18.0     lattice_0.22-6     R6_2.5.1           labeling_0.4.3    
+[13] generics_0.1.3     MASS_7.3-60.2      backports_1.4.1    munsell_0.5.1     
+[17] pillar_1.9.0       rlang_1.1.5        utf8_1.2.4         stringi_1.8.4     
+[21] cli_3.6.3          withr_3.0.2        magrittr_2.0.3     digest_0.6.35     
+[25] grid_4.4.0         lifecycle_1.0.4    vctrs_0.6.5        glue_1.8.0        
+[29] farver_2.1.1       listenv_0.9.1      ragg_1.3.1         codetools_0.2-20  
+[33] survival_3.5-8     parallelly_1.45.1  fansi_1.0.6        colorspace_2.1-0  
+[37] purrr_1.0.2        tools_4.4.0        pkgconfig_2.0.3   

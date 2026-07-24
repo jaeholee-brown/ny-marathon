@@ -1,12 +1,15 @@
-# model 1: base title ix (3-level factor)
+# expanded model: Title IX exposure (3-level factor)
 #
 # requires: 00_setup.R and 01_data_cleaning.R to be sourced first
-# outputs: df_m1, qr_fit_base, coef_base, visualization
+# outputs: df_m1, qr_fit_base, coef_base, and visualizations
 
-# create 3-level title ix variable
-# - no: males or females born <= 1953
-# - some: females born 1954-1969 (partial exposure)
-# - yes: females born >= 1970 (full exposure)
+if (!exists("MODEL_OUTPUT_DIR")) MODEL_OUTPUT_DIR <- "output"
+dir.create(MODEL_OUTPUT_DIR, recursive = TRUE, showWarnings = FALSE)
+
+# create 3-level Title IX variable
+# - no: men, or women born in 1953 or earlier
+# - some: women born from 1954 through 1969 (partial exposure)
+# - yes: women born in 1970 or later (full exposure)
 df_m1 <- df %>%
   mutate(
     TitleIX = dplyr::case_when(
@@ -22,7 +25,7 @@ df_m1 <- df %>%
 
 # fit quantile regression across all taus
 qr_fit_base <- rq(
-  FinishSeconds ~
+  FinishMinutes ~
     factor(Year) +
     bs(Age, knots = c(21, 45, 60)) +
     TitleIX +
@@ -36,7 +39,11 @@ qr_fit_base <- rq(
 # extract coefficients
 coef_base <- GetQrCoefs(qr_fit_base, taus)
 print(coef_base)
-write.csv(coef_base, "output/coef_m1_base_titleix.csv", row.names = FALSE)
+write.csv(
+  coef_base,
+  file.path(MODEL_OUTPUT_DIR, "coef_m1_base_titleix.csv"),
+  row.names = FALSE
+)
 
 # prepare plot data for "some" and "yes" vs "no"
 plot_data_base <- coef_base %>%
@@ -44,10 +51,10 @@ plot_data_base <- coef_base %>%
   mutate(
     label = fct_recode(
       term,
-      "Some vs No" = "TitleIXSome",
-      "Yes vs No" = "TitleIXYes"
+      "Partial vs No Exposure" = "TitleIXSome",
+      "Full vs No Exposure" = "TitleIXYes"
     ),
-    effect_sec = estimate,
+    effect_min = estimate,
     lo = estimate - 1.96 * std.error,
     hi = estimate + 1.96 * std.error
   )
@@ -55,7 +62,7 @@ plot_data_base <- coef_base %>%
 # visualization: ribbon plot
 p_m1_ribbon <- ggplot(
   plot_data_base,
-  aes(x = tau, y = effect_sec, color = label, group = label)
+  aes(x = tau, y = effect_min, color = label, group = label)
 ) +
   geom_ribbon(
     aes(ymin = lo, ymax = hi, fill = label),
@@ -69,29 +76,36 @@ p_m1_ribbon <- ggplot(
   scale_fill_discrete(name = "Title IX status") +
   labs(
     x = "Quantile",
-    y = "Effect on finish time (seconds)",
-    title = "Estimated Title IX effect (Base Model)"
+    y = "Effect on finish time (minutes)",
+    title = "Estimated Title IX Effect (Expanded Model)"
   ) +
-  theme_minimal(base_size = 18) +
+  theme_minimal(base_size = 12) +
   theme(
-    plot.title = element_text(face = "bold", hjust = 0.5, size = 22),
-    axis.title = element_text(face = "bold", size = 20),
-    axis.text = element_text(size = 16),
-    legend.title = element_text(face = "bold", size = 18),
-    legend.text = element_text(size = 16),
+    plot.title = element_text(face = "bold", hjust = 0.5, size = 14),
+    axis.title = element_text(face = "bold", size = 12),
+    axis.text = element_text(size = 12),
+    legend.title = element_text(face = "bold", size = 12),
+    legend.text = element_text(size = 12),
     legend.position = "bottom",
     panel.grid.minor = element_blank(),
     panel.grid.major.x = element_blank(),
     plot.margin = margin(t = 15, r = 20, b = 15, l = 20)
   )
 
-print(p_m1_ribbon)
-ggsave("output/m1_base_titleix.png", p_m1_ribbon, width = 10, height = 7, dpi = 300)
+if (interactive()) print(p_m1_ribbon)
+ggsave(
+  file.path(MODEL_OUTPUT_DIR, "m1_base_titleix.png"),
+  p_m1_ribbon,
+  width = 10,
+  height = 7,
+  dpi = 300,
+  bg = "white"
+)
 
 # visualization: error bar plot with custom colors
 p_m1_errorbar <- ggplot(
   plot_data_base,
-  aes(x = tau, y = effect_sec, color = label, group = label)
+  aes(x = tau, y = effect_min, color = label, group = label)
 ) +
   geom_errorbar(
     aes(ymin = lo, ymax = hi),
@@ -104,28 +118,36 @@ p_m1_errorbar <- ggplot(
   scale_x_continuous(labels = scales::percent_format(accuracy = 1)) +
   scale_color_manual(
     values = c(
-      "Some vs No" = "goldenrod1",
-      "Yes vs No" = "forestgreen"
+      "Partial vs No Exposure" = "goldenrod1",
+      "Full vs No Exposure" = "forestgreen"
     )
   ) +
   labs(
     x = "Quantile",
-    y = "Effect on finish time (seconds)",
-    title = "Estimated Title IX effect (M1)",
+    y = "Effect on finish time (minutes)",
+    title = "Estimated Title IX Effect (Expanded Model)",
     color = NULL
   ) +
   theme_minimal(base_size = 12) +
   theme(
-    plot.title = element_text(face = "bold", size = 24, hjust = 0.5),
-    axis.title = element_text(face = "bold", size = 18),
-    axis.text = element_text(size = 16),
-    legend.text = element_text(size = 16),
-    legend.position = c(1, 1),
+    plot.title = element_text(face = "bold", size = 14, hjust = 0.5),
+    axis.title = element_text(face = "bold", size = 12),
+    axis.text = element_text(size = 12),
+    legend.text = element_text(size = 12),
+    legend.position = "inside",
+    legend.position.inside = c(1, 1),
     legend.justification = c(1.07, 1.45),
     legend.background = element_rect(fill = "white", color = "black")
   )
 
-print(p_m1_errorbar)
-ggsave("output/someyesplot.png", p_m1_errorbar, width = 7, height = 5, dpi = 300)
+if (interactive()) print(p_m1_errorbar)
+ggsave(
+  file.path(MODEL_OUTPUT_DIR, "someyesplot.png"),
+  p_m1_errorbar,
+  width = 7,
+  height = 5,
+  dpi = 300,
+  bg = "white"
+)
 
-message("model 1 complete")
+message("expanded model complete")
