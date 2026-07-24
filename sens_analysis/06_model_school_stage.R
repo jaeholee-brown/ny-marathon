@@ -29,7 +29,7 @@ df_m5 <- df %>%
 
 # fit quantile regression with 5-level school stage factor
 qr_fit_5 <- rq(
-  FinishSeconds ~
+  FinishMinutes ~
     factor(Year) +
     bs(Age, knots = c(21, 45, 60)) +
     TitleIX_5 +
@@ -43,16 +43,20 @@ qr_fit_5 <- rq(
 # extract coefficients
 coef_5 <- GetQrCoefs(qr_fit_5, taus)
 print(coef_5)
-write.csv(coef_5, "output/coef_m5_school_stage.csv", row.names = FALSE)
+write.csv(
+  coef_5,
+  "sens_analysis/output/coef_m5_school_stage.csv",
+  row.names = FALSE
+)
 
 # prepare plot data
 plot_data_5 <- coef_5 %>%
   filter(grepl("^TitleIX_5", term)) %>%
   mutate(
     label = str_remove(term, "^TitleIX_5"),
-    effect_min = estimate / 60,
-    lo = (estimate - 1.96 * std.error) / 60,
-    hi = (estimate + 1.96 * std.error) / 60
+    effect_min = estimate,
+    lo = estimate - 1.96 * std.error,
+    hi = estimate + 1.96 * std.error
   )
 
 # visualization: effects by school stage
@@ -78,7 +82,13 @@ p_m5 <- ggplot(
   ) +
   theme_minimal(base_size = 12)
 
-print(p_m5)
-ggsave("output/m5_school_stage.png", p_m5, width = 10, height = 6, dpi = 300)
+if (interactive()) print(p_m5)
+ggsave(
+  "sens_analysis/output/m5_school_stage.png",
+  p_m5,
+  width = 10,
+  height = 6,
+  dpi = 300
+)
 
 message("model 5 complete")

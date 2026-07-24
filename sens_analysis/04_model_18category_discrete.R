@@ -1,6 +1,7 @@
 # model 3: 18-category discrete (no, some1-16, yes)
 #
-# requires: 00_setup.R, 01_data_cleaning.R, and 03_model_continuous_exposure.R
+# requires: 00_setup.R, 01_data_cleaning.R, and
+# sens_analysis/03_model_continuous_exposure.R
 # outputs: df_m3, qr_fit_18, coef_18, visualization
 
 # create granular factor levels for every year of exposure
@@ -25,7 +26,7 @@ df_m3 <- df_m2 %>%
 
 # fit quantile regression with 18-level factor
 qr_fit_18 <- rq(
-  FinishSeconds ~
+  FinishMinutes ~
     factor(Year) +
     bs(Age, knots = c(21, 45, 60)) +
     TitleIX_18 +
@@ -39,7 +40,11 @@ qr_fit_18 <- rq(
 # extract coefficients
 coef_18 <- GetQrCoefs(qr_fit_18, taus)
 print(coef_18)
-write.csv(coef_18, "output/coef_m3_18category.csv", row.names = FALSE)
+write.csv(
+  coef_18,
+  "sens_analysis/output/coef_m3_18category.csv",
+  row.names = FALSE
+)
 
 # prepare plot data: effects by exposure year
 plot_data_18 <- coef_18 %>%
@@ -49,7 +54,7 @@ plot_data_18 <- coef_18 %>%
       grepl("Some", term) ~ as.integer(str_remove(term, "^TitleIX_18Some")),
       grepl("Yes", term) ~ 17L
     ),
-    effect_min = estimate / 60
+    effect_min = estimate
   )
 
 # visualization: effects by exposure duration
@@ -71,7 +76,13 @@ p_m3 <- ggplot(
   ) +
   theme_minimal(base_size = 12)
 
-print(p_m3)
-ggsave("output/m3_18category.png", p_m3, width = 10, height = 6, dpi = 300)
+if (interactive()) print(p_m3)
+ggsave(
+  "sens_analysis/output/m3_18category.png",
+  p_m3,
+  width = 10,
+  height = 6,
+  dpi = 300
+)
 
 message("model 3 complete")

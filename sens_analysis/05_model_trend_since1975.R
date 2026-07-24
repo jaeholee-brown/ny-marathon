@@ -17,7 +17,7 @@ df_m4 <- df %>%
 
 # fit quantile regression with trend variable
 qr_fit_since1975 <- rq(
-  FinishSeconds ~
+  FinishMinutes ~
     factor(Year) +
     bs(Age, knots = c(21, 45, 60)) +
     TitleIX_since1975 +
@@ -30,7 +30,11 @@ qr_fit_since1975 <- rq(
 
 # extract coefficients
 coef_since1975 <- GetQrCoefs(qr_fit_since1975, taus)
-write.csv(coef_since1975, "output/coef_m4_trend.csv", row.names = FALSE)
+write.csv(
+  coef_since1975,
+  "sens_analysis/output/coef_m4_trend.csv",
+  row.names = FALSE
+)
 
 # print only the relevant trend term
 coef_since1975 %>%

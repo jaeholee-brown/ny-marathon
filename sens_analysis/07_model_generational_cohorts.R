@@ -27,7 +27,7 @@ df_m6 <- df %>%
 
 # fit quantile regression with 4-level generational factor
 qr_fit_4 <- rq(
-  FinishSeconds ~
+  FinishMinutes ~
     factor(Year) +
     bs(Age, knots = c(21, 45, 60)) +
     TitleIX_4 +
@@ -41,16 +41,20 @@ qr_fit_4 <- rq(
 # extract coefficients
 coef_4 <- GetQrCoefs(qr_fit_4, taus)
 print(coef_4)
-write.csv(coef_4, "output/coef_m6_generational.csv", row.names = FALSE)
+write.csv(
+  coef_4,
+  "sens_analysis/output/coef_m6_generational.csv",
+  row.names = FALSE
+)
 
 # prepare plot data
 plot_data_4 <- coef_4 %>%
   filter(grepl("^TitleIX_4", term)) %>%
   mutate(
     label = str_remove(term, "^TitleIX_4"),
-    effect_min = estimate / 60,
-    lo = (estimate - 1.96 * std.error) / 60,
-    hi = (estimate + 1.96 * std.error) / 60
+    effect_min = estimate,
+    lo = estimate - 1.96 * std.error,
+    hi = estimate + 1.96 * std.error
   )
 
 # visualization: effects by generation
@@ -76,7 +80,13 @@ p_m6 <- ggplot(
   ) +
   theme_minimal(base_size = 12)
 
-print(p_m6)
-ggsave("output/m6_generational.png", p_m6, width = 10, height = 6, dpi = 300)
+if (interactive()) print(p_m6)
+ggsave(
+  "sens_analysis/output/m6_generational.png",
+  p_m6,
+  width = 10,
+  height = 6,
+  dpi = 300
+)
 
 message("model 6 complete")

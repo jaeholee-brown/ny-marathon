@@ -27,7 +27,7 @@ df_m2 <- df %>%
 
 # fit quantile regression with continuous exposure variable
 qr_fit_cont <- rq(
-  FinishSeconds ~
+  FinishMinutes ~
     factor(Year) +
     bs(Age, knots = c(21, 45, 60)) +
     TitleIX_years +
@@ -40,7 +40,11 @@ qr_fit_cont <- rq(
 
 # extract coefficients
 coef_cont <- GetQrCoefs(qr_fit_cont, taus)
-write.csv(coef_cont, "output/coef_m2_continuous.csv", row.names = FALSE)
+write.csv(
+  coef_cont,
+  "sens_analysis/output/coef_m2_continuous.csv",
+  row.names = FALSE
+)
 
 # print only the relevant continuous term
 coef_cont %>%
@@ -70,7 +74,7 @@ p_m2 <- ggplot(
   scale_x_continuous(breaks = coef_cont_titleix$tau) +
   labs(
     x = "Quantile",
-    y = "Seconds (s)",
+    y = "Minutes",
     title = "Coefficients for TitleIX_years, by Quantile"
   ) +
   theme_minimal(base_size = 18) +
@@ -83,7 +87,13 @@ p_m2 <- ggplot(
     plot.margin = margin(t = 15, r = 20, b = 15, l = 20)
   )
 
-print(p_m2)
-ggsave("output/continuous_plot.png", p_m2, width = 10, height = 7, dpi = 300)
+if (interactive()) print(p_m2)
+ggsave(
+  "sens_analysis/output/continuous_plot.png",
+  p_m2,
+  width = 10,
+  height = 7,
+  dpi = 300
+)
 
 message("model 2 complete")

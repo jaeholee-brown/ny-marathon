@@ -87,7 +87,7 @@ CvQrMeanLoss <- function(df, formula, taus_vec, K = 5, seed = 123) {
       pred_k <- predict(fit_k, newdata = df[test_idx, , drop = FALSE])
 
       # return total check loss for this fold (sum, not mean)
-      sum(CheckLoss(df$FinishSeconds[test_idx], pred_k, tau))
+      sum(CheckLoss(df$FinishMinutes[test_idx], pred_k, tau))
     },
     grid$tau_idx,
     grid$fold,
@@ -179,7 +179,11 @@ cv_results <- dplyr::bind_rows(
   arrange(mean_check_loss)
 
 print(cv_results)
-write.csv(cv_results, "output/cv_results.csv", row.names = FALSE)
+write.csv(
+  cv_results,
+  "sens_analysis/output/cv_results.csv",
+  row.names = FALSE
+)
 
 # visualization: model ranking by cv loss
 p_cv <- cv_results %>%
@@ -194,7 +198,13 @@ p_cv <- cv_results %>%
   ) +
   theme_minimal(base_size = 12)
 
-print(p_cv)
-ggsave("output/cv_comparison.png", p_cv, width = 10, height = 6, dpi = 300)
+if (interactive()) print(p_cv)
+ggsave(
+  "sens_analysis/output/cv_comparison.png",
+  p_cv,
+  width = 10,
+  height = 6,
+  dpi = 300
+)
 
 message("cross-validation complete")
